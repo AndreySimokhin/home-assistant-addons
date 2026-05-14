@@ -178,10 +178,7 @@ def configured_middlewares(options, router_name):
 
 def build_dynamic_config(options):
     config = load_yaml(DEFAULT_HOME_ASSISTANT_CONFIG)
-    http = config.setdefault("http", {})
-    http["routers"] = {}
-    http["services"] = {}
-    http["middlewares"] = {}
+    http = {}
     http["serversTransports"] = {
         "ha-transport": {
             "forwardingTimeouts": {
@@ -195,6 +192,7 @@ def build_dynamic_config(options):
     domain = options["domain"]
     home_assistant_middlewares = configured_middlewares(options, "home_assistant")
     dashboard_middlewares = configured_middlewares(options, "dashboard")
+    routers = {}
 
     if options["http_enabled"]:
         router = {
@@ -204,7 +202,7 @@ def build_dynamic_config(options):
         }
         if home_assistant_middlewares:
             router["middlewares"] = home_assistant_middlewares
-        http["routers"]["homeassistant-http"] = router
+        routers["homeassistant-http"] = router
 
     if options["https_enabled"]:
         tls_config = router_tls_config(options)
@@ -217,7 +215,7 @@ def build_dynamic_config(options):
             router["middlewares"] = home_assistant_middlewares
         if tls_config is not None:
             router["tls"] = tls_config
-        http["routers"]["homeassistant-https"] = router
+        routers["homeassistant-https"] = router
 
     if options["dashboard"]["enabled"] and options["dashboard"]["external"] and options["tls"]["enabled"]:
         tls_config = router_tls_config(options)
@@ -229,15 +227,19 @@ def build_dynamic_config(options):
         }
         if dashboard_middlewares:
             router["middlewares"] = dashboard_middlewares
-        http["routers"]["traefik-dashboard"] = router
+        routers["traefik-dashboard"] = router
 
-    http["services"]["homeassistant"] = {
-        "loadBalancer": {
-            "passHostHeader": options["home_assistant"]["pass_host_header"],
-            "serversTransport": "ha-transport",
-            "servers": [{"url": options["home_assistant"]["url"]}],
+    http["routers"] = routers
+    http["services"] = {
+        "homeassistant": {
+            "loadBalancer": {
+                "passHostHeader": options["home_assistant"]["pass_host_header"],
+                "serversTransport": "ha-transport",
+                "servers": [{"url": options["home_assistant"]["url"]}],
+            }
         }
     }
+    config["http"] = http
 
     config["tls"] = {
         "options": {
@@ -250,10 +252,10 @@ def build_dynamic_config(options):
     if options["tls"]["enabled"]:
         if not acme_enabled(options):
             config["tls"]["certificates"] = [
-            {
-                "certFile": options["tls"]["cert_file"],
-                "keyFile": options["tls"]["key_file"],
-            }
+                {
+                    "certFile": options["tls"]["cert_file"],
+                    "keyFile": options["tls"]["key_file"],
+                }
             ]
 
     extra_dynamic = yaml_block(options["custom"].get("extra_dynamic_config"))
