@@ -39,6 +39,14 @@ options:
     min_version: VersionTLS12
     hsts_enabled: true
     hsts_seconds: 31536000
+    acme:
+      enabled: false
+      email: ""
+      resolver: letsencrypt
+      storage: /config/traefik/acme/acme.json
+      challenge: http
+      http_entrypoint: web
+      ca_server: ""
   home_assistant:
     url: http://homeassistant:8123
     pass_host_header: true
@@ -46,27 +54,14 @@ options:
     access_enabled: true
     json: true
     mirror_to_stdout: true
-    access_file: /share/traefik-access.log
-    error_file: /share/traefik-error.log
+    access_file: /share/traefik/access.log
+    error_file: /share/traefik/error.log
     level: INFO
     rotate_size: 10M
     rotate_count: 7
-  middleware:
-    security_headers: true
-    rate_limit: true
-    average: 100
-    burst: 50
-    login_average: 5
-    login_burst: 10
-    inflight_limit: 100
-    ip_allowlist_enabled: false
-    ip_allowlist:
-      - 192.168.0.0/16
-      - 10.0.0.0/8
-    basic_auth_enabled: false
-    basic_auth_users: []
-    forward_auth_enabled: false
-    forward_auth_address: ""
+  middlewares:
+    home_assistant: []
+    dashboard: []
   dashboard:
     enabled: false
     external: false
@@ -90,6 +85,14 @@ schema:
     min_version: list(VersionTLS12|VersionTLS13)
     hsts_enabled: bool
     hsts_seconds: int
+    acme:
+      enabled: bool
+      email: str?
+      resolver: str
+      storage: str
+      challenge: list(http|tls)
+      http_entrypoint: str
+      ca_server: str?
   home_assistant:
     url: url
     pass_host_header: bool
@@ -102,22 +105,11 @@ schema:
     level: list(DEBUG|INFO|WARN|ERROR)
     rotate_size: str
     rotate_count: int
-  middleware:
-    security_headers: bool
-    rate_limit: bool
-    average: int
-    burst: int
-    login_average: int
-    login_burst: int
-    inflight_limit: int
-    ip_allowlist_enabled: bool
-    ip_allowlist:
+  middlewares:
+    home_assistant:
       - str
-    basic_auth_enabled: bool
-    basic_auth_users:
+    dashboard:
       - str
-    forward_auth_enabled: bool
-    forward_auth_address: str?
   dashboard:
     enabled: bool
     external: bool

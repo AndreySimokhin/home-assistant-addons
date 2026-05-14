@@ -53,6 +53,18 @@ def log_format(options):
     return "json" if options["logs"]["json"] else "common"
 
 
+def acme_enabled(options):
+    return options["tls"]["enabled"] and options["tls"].get("acme", {}).get("enabled", False)
+
+
+def router_tls_config(options):
+    if not options["tls"]["enabled"]:
+        return None
+    if acme_enabled(options):
+        return {"certResolver": options["tls"]["acme"]["resolver"]}
+    return {}
+
+
 def build_static_config(options):
     config = load_yaml(DEFAULT_STATIC_CONFIG)
     dynamic_provider_key = "directory" if options["custom"]["enable_dynamic_directory"] else "filename"
@@ -69,6 +81,7 @@ def build_static_config(options):
     }
     config["api"]["dashboard"] = options["dashboard"]["enabled"]
     config["entryPoints"] = {}
+    config.pop("certificatesResolvers", None)
 
     if options["http_enabled"]:
         web = {
@@ -133,6 +146,25 @@ def build_static_config(options):
     if modules:
         config["experimental"] = {"plugins": modules}
 
+    if acme_enabled(options):
+        acme_options = options["tls"]["acme"]
+        acme = {
+            "email": acme_options["email"],
+            "storage": acme_options["storage"],
+        }
+        if acme_options.get("ca_server"):
+            acme["caServer"] = acme_options["ca_server"]
+        if acme_options["challenge"] == "http":
+            acme["httpChallenge"] = {"entryPoint": acme_options["http_entrypoint"]}
+        elif acme_options["challenge"] == "tls":
+            acme["tlsChallenge"] = {}
+
+        config["certificatesResolvers"] = {
+            acme_options["resolver"]: {
+                "acme": acme,
+            }
+        }
+
     extra_static = yaml_block(options["custom"].get("extra_static_config"))
     if extra_static:
         deep_merge(config, extra_static)
@@ -140,19 +172,8 @@ def build_static_config(options):
     return config
 
 
-def middleware_chain(options):
-    middlewares = []
-    if options["middleware"]["security_headers"]:
-        middlewares.append("security-headers")
-    if options["middleware"]["rate_limit"]:
-        middlewares.extend(["request-rate-limit", "login-rate-limit", "inflight-limit"])
-    if options["middleware"]["ip_allowlist_enabled"]:
-        middlewares.append("ip-allowlist")
-    if options["middleware"]["basic_auth_enabled"]:
-        middlewares.append("basic-auth")
-    if options["middleware"]["forward_auth_enabled"]:
-        middlewares.append("forward-auth")
-    return middlewares
+def configured_middlewares(options, router_name):
+    return options.get("middlewares", {}).get(router_name, [])
 
 
 def build_dynamic_config(options):
@@ -172,35 +193,43 @@ def build_dynamic_config(options):
     }
 
     domain = options["domain"]
-    chain = middleware_chain(options)
+    home_assistant_middlewares = configured_middlewares(options, "home_assistant")
+    dashboard_middlewares = configured_middlewares(options, "dashboard")
 
     if options["http_enabled"]:
-        http["routers"]["homeassistant-http"] = {
+        router = {
             "rule": f"Host(`{domain}`)",
             "entryPoints": ["web"],
             "service": "homeassistant",
-            "middlewares": ["ha-chain"],
         }
+        if home_assistant_middlewares:
+            router["middlewares"] = home_assistant_middlewares
+        http["routers"]["homeassistant-http"] = router
 
     if options["https_enabled"]:
+        tls_config = router_tls_config(options)
         router = {
             "rule": f"Host(`{domain}`)",
             "entryPoints": ["websecure"],
             "service": "homeassistant",
-            "middlewares": ["ha-chain"],
         }
-        if options["tls"]["enabled"]:
-            router["tls"] = {}
+        if home_assistant_middlewares:
+            router["middlewares"] = home_assistant_middlewares
+        if tls_config is not None:
+            router["tls"] = tls_config
         http["routers"]["homeassistant-https"] = router
 
     if options["dashboard"]["enabled"] and options["dashboard"]["external"] and options["tls"]["enabled"]:
-        http["routers"]["traefik-dashboard"] = {
+        tls_config = router_tls_config(options)
+        router = {
             "rule": f"Host(`traefik.{domain}`)",
             "entryPoints": ["websecure"],
             "service": "api@internal",
-            "middlewares": ["dashboard-auth", "security-headers"],
-            "tls": {},
+            "tls": tls_config if tls_config is not None else {},
         }
+        if dashboard_middlewares:
+            router["middlewares"] = dashboard_middlewares
+        http["routers"]["traefik-dashboard"] = router
 
     http["services"]["homeassistant"] = {
         "loadBalancer": {
@@ -209,65 +238,6 @@ def build_dynamic_config(options):
             "servers": [{"url": options["home_assistant"]["url"]}],
         }
     }
-
-    http["middlewares"]["ha-chain"] = {"chain": {"middlewares": chain}}
-    hsts_seconds = options["tls"]["hsts_seconds"] if options["tls"]["hsts_enabled"] else 0
-    http["middlewares"]["security-headers"] = {
-        "headers": {
-            "frameDeny": True,
-            "contentTypeNosniff": True,
-            "referrerPolicy": "strict-origin-when-cross-origin",
-            "browserXssFilter": True,
-            "stsSeconds": hsts_seconds,
-            "stsIncludeSubdomains": False,
-            "stsPreload": False,
-            "customResponseHeaders": {
-                "X-Robots-Tag": "noindex, nofollow, nosnippet, noarchive"
-            },
-        }
-    }
-    http["middlewares"]["request-rate-limit"] = {
-        "rateLimit": {
-            "average": options["middleware"]["average"],
-            "burst": options["middleware"]["burst"],
-        }
-    }
-    http["middlewares"]["login-rate-limit"] = {
-        "rateLimit": {
-            "average": options["middleware"]["login_average"],
-            "burst": options["middleware"]["login_burst"],
-            "sourceCriterion": {"requestHeaderName": "X-Forwarded-For"},
-        }
-    }
-    http["middlewares"]["inflight-limit"] = {
-        "inFlightReq": {"amount": options["middleware"]["inflight_limit"]}
-    }
-    http["middlewares"]["dashboard-auth"] = {
-        "basicAuth": {"users": ["$2y$05$replace.with.real.dashboard.basic.auth.hash"]}
-    }
-
-    if options["middleware"]["ip_allowlist_enabled"]:
-        http["middlewares"]["ip-allowlist"] = {
-            "ipAllowList": {"sourceRange": options["middleware"]["ip_allowlist"]}
-        }
-
-    if options["middleware"]["basic_auth_enabled"]:
-        http["middlewares"]["basic-auth"] = {
-            "basicAuth": {"users": options["middleware"]["basic_auth_users"]}
-        }
-
-    if options["middleware"]["forward_auth_enabled"]:
-        http["middlewares"]["forward-auth"] = {
-            "forwardAuth": {
-                "address": options["middleware"]["forward_auth_address"],
-                "trustForwardHeader": True,
-                "authResponseHeaders": [
-                    "X-Forwarded-User",
-                    "X-Forwarded-Groups",
-                    "X-Forwarded-Email",
-                ],
-            }
-        }
 
     config["tls"] = {
         "options": {
@@ -278,12 +248,13 @@ def build_dynamic_config(options):
         }
     }
     if options["tls"]["enabled"]:
-        config["tls"]["certificates"] = [
+        if not acme_enabled(options):
+            config["tls"]["certificates"] = [
             {
                 "certFile": options["tls"]["cert_file"],
                 "keyFile": options["tls"]["key_file"],
             }
-        ]
+            ]
 
     extra_dynamic = yaml_block(options["custom"].get("extra_dynamic_config"))
     if extra_dynamic:
@@ -327,4 +298,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

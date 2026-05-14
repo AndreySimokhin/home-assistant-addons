@@ -10,8 +10,8 @@ Production-oriented Traefik v3 reverse proxy for Home Assistant OS.
 - File provider with dynamic reload
 - WebSocket and SSE friendly timeouts
 - HTTP/2 on the HTTPS entrypoint
-- Persistent access and error logs under `/share`
-- Security headers, rate limits, in-flight request limit, optional IP allowlist, basic auth, and forward auth
+- Persistent access and error logs under `/share/traefik`
+- User-selected Traefik middlewares through dynamic configuration
 - Optional Traefik dashboard, disabled externally by default
 - User-managed dynamic config files in `/config/traefik/dynamic/*.yaml`
 - Raw advanced escape hatches via `custom.extra_static_config` and `custom.extra_dynamic_config`
@@ -28,20 +28,41 @@ Traefik listens on `http_port` and `https_port` from the add-on options. If you 
 
 ## TLS
 
-By default TLS is enabled and expects:
+By default TLS is enabled with existing certificate files and expects:
 
 - `/ssl/fullchain.pem`
 - `/ssl/privkey.pem`
 
 If those files are missing, the add-on logs a clear error and waits instead of repeatedly crashing.
 
+For automatic certificates, enable ACME:
+
+```yaml
+tls:
+  enabled: true
+  acme:
+    enabled: true
+    email: you@example.com
+    resolver: letsencrypt
+    storage: /config/traefik/acme/acme.json
+    challenge: http
+    http_entrypoint: web
+    ca_server: ""
+```
+
+With `challenge: http`, Let's Encrypt must reach this add-on on public port `80`. With `challenge: tls`, Let's Encrypt must reach this add-on on public port `443`. Non-standard external ports like `8443` do not work for these ACME challenges. Use the Let's Encrypt staging CA in `ca_server` while testing to avoid rate limits:
+
+```yaml
+ca_server: https://acme-staging-v02.api.letsencrypt.org/directory
+```
+
 ## Dashboard
 
-The dashboard is disabled by default. Keep `dashboard.external` disabled unless you add a real `dashboard-auth` hash and understand the exposure.
+The dashboard is disabled by default. Keep `dashboard.external` disabled unless you attach your own authentication middleware through `middlewares.dashboard`.
 
 ## Operational notes
 
-Generated Traefik config is written to `/config/traefik`, which is persistent through add-on restarts and Home Assistant OS updates. Logs are written to `/share` and rotated hourly via logrotate.
+Generated Traefik config is written to `/config/traefik`, which is persistent through add-on restarts and Home Assistant OS updates. Logs are written to `/share/traefik` and rotated hourly via logrotate.
 
 By default, access and error logs are also mirrored to the add-on stdout with `logs.mirror_to_stdout: true`, so they appear in the Home Assistant add-on journal.
 
@@ -80,9 +101,32 @@ Additional Traefik dynamic configuration can be added as separate YAML files in:
 /config/traefik/dynamic/
 ```
 
-Traefik watches this directory and reloads changes automatically.
+Traefik watches this directory and reloads file changes automatically. Files added directly to `/config/traefik/dynamic/` do not require an add-on restart.
 
-Advanced static Traefik settings can be appended with `custom.extra_static_config`. Advanced dynamic settings from the add-on options can be written with `custom.extra_dynamic_config`.
+Advanced static Traefik settings can be merged with `custom.extra_static_config`. Advanced dynamic settings from the add-on options can be merged with `custom.extra_dynamic_config`; changing add-on options requires restarting the add-on so the renderer can write the generated files again.
+
+To attach custom middleware to the managed Home Assistant routers, define the middleware in dynamic config and reference it by name:
+
+```yaml
+middlewares:
+  home_assistant:
+    - my-security-headers
+  dashboard:
+    - dashboard-auth
+
+custom:
+  extra_dynamic_config: |
+    http:
+      middlewares:
+        my-security-headers:
+          headers:
+            contentTypeNosniff: true
+            referrerPolicy: strict-origin-when-cross-origin
+        dashboard-auth:
+          basicAuth:
+            users:
+              - "user:hashed-password"
+```
 
 For complete control over static Traefik configuration, set:
 
@@ -90,3 +134,5 @@ For complete control over static Traefik configuration, set:
 custom:
   static_config_override_file: /config/traefik/custom-static.yaml
 ```
+
+Static configuration cannot be hot-reloaded by Traefik. Changes to static config, static modules, ACME resolvers, entrypoints, or providers require restarting the add-on.
