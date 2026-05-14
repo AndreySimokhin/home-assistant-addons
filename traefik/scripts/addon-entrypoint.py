@@ -13,6 +13,8 @@ STATIC_CONFIG = CONFIG_DIR / "traefik.yaml"
 OPTIONS_FILE = Path("/data/options.json")
 LOGROTATE_CONFIG = Path("/etc/logrotate.d/traefik")
 LOGROTATE_STATUS = Path("/tmp/logrotate.status")
+ACCESS_LOG = Path("/share/traefik-access.log")
+ERROR_LOG = Path("/share/traefik-error.log")
 
 
 def log_info(message):
@@ -44,7 +46,7 @@ def prepare_runtime():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     Path("/share").mkdir(parents=True, exist_ok=True)
 
-    for log_file in (Path("/share/traefik-access.log"), Path("/share/traefik-error.log")):
+    for log_file in (ACCESS_LOG, ERROR_LOG):
         log_file.touch(exist_ok=True)
         os.chown(log_file, 0, 0)
         log_file.chmod(0o644)
@@ -101,6 +103,30 @@ def start_logrotate_background():
     )
 
 
+def start_log_mirror_background(log_file, prefix):
+    return subprocess.Popen(
+        [
+            "python3",
+            "-c",
+            (
+                "import pathlib, sys, time; "
+                f"path = pathlib.Path({str(log_file)!r}); "
+                f"prefix = {prefix!r}; "
+                "\npath.touch(exist_ok=True)\n"
+                "with path.open('r', encoding='utf-8', errors='replace') as file:\n"
+                "    file.seek(0, 2)\n"
+                "    while True:\n"
+                "        line = file.readline()\n"
+                "        if line:\n"
+                "            print(prefix + line.rstrip(), flush=True)\n"
+                "        else:\n"
+                "            time.sleep(0.5)\n"
+            ),
+        ],
+        start_new_session=True,
+    )
+
+
 def stop_process(process, timeout=10):
     if process.poll() is not None:
         return
@@ -113,20 +139,22 @@ def stop_process(process, timeout=10):
         process.wait()
 
 
-def start_traefik(static_config, logrotate):
+def start_traefik(static_config, background_processes):
     log_info("Starting Traefik reverse proxy")
     traefik = subprocess.Popen(["traefik", f"--configFile={static_config}"])
 
     def stop(_signum, _frame):
         stop_process(traefik)
-        stop_process(logrotate)
+        for process in background_processes:
+            stop_process(process)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
 
     exit_code = traefik.wait()
-    stop_process(logrotate)
+    for process in background_processes:
+        stop_process(process)
     fatal_wait(f"Traefik exited unexpectedly with code {exit_code}. Check the Traefik logs above.")
 
 
@@ -138,8 +166,12 @@ def main():
     static_config = resolve_static_config(options)
     validate_tls_files(options)
 
-    logrotate = start_logrotate_background()
-    start_traefik(static_config, logrotate)
+    background_processes = [start_logrotate_background()]
+    if options["logs"].get("mirror_to_stdout", True):
+        background_processes.append(start_log_mirror_background(ACCESS_LOG, "[TRAEFIK ACCESS] "))
+        background_processes.append(start_log_mirror_background(ERROR_LOG, "[TRAEFIK ERROR] "))
+
+    start_traefik(static_config, background_processes)
 
 
 if __name__ == "__main__":

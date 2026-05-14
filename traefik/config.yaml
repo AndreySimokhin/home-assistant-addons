@@ -45,6 +45,7 @@ options:
   logs:
     access_enabled: true
     json: true
+    mirror_to_stdout: true
     access_file: /share/traefik-access.log
     error_file: /share/traefik-error.log
     level: INFO
@@ -95,6 +96,7 @@ schema:
   logs:
     access_enabled: bool
     json: bool
+    mirror_to_stdout: bool
     access_file: str
     error_file: str
     level: list(DEBUG|INFO|WARN|ERROR)

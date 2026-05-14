@@ -43,6 +43,8 @@ The dashboard is disabled by default. Keep `dashboard.external` disabled unless 
 
 Generated Traefik config is written to `/config/traefik`, which is persistent through add-on restarts and Home Assistant OS updates. Logs are written to `/share` and rotated hourly via logrotate.
 
+By default, access and error logs are also mirrored to the add-on stdout with `logs.mirror_to_stdout: true`, so they appear in the Home Assistant add-on journal.
+
 ## File layout
 
 The repository keeps source files in plain project directories and copies them into the image explicitly:
