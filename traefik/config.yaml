@@ -2,7 +2,7 @@ name: Traefik Reverse Proxy
 version: 0.1.0
 slug: traefik
 description: Production-oriented Traefik v3 reverse proxy for Home Assistant OS
-url: https://github.com/charwisd/home-assistant-addons/tree/main/traefik
+url: https://github.com/AndreySimokhin/home-assistant-addons/tree/main/traefik
 arch:
   - aarch64
   - amd64
