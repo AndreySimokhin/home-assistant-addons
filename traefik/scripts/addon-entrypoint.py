@@ -3,6 +3,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -83,12 +84,6 @@ def validate_tls_files(options):
         fatal_wait(f"TLS is enabled but key file is missing: {key_file}")
 
 
-def validate_traefik_config(static_config):
-    result = subprocess.run(["traefik", "check", f"--configFile={static_config}"], check=False)
-    if result.returncode != 0:
-        fatal_wait("Traefik configuration validation failed.")
-
-
 def start_logrotate_background():
     return subprocess.Popen(
         [
@@ -106,9 +101,33 @@ def start_logrotate_background():
     )
 
 
-def start_traefik(static_config):
+def stop_process(process, timeout=10):
+    if process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def start_traefik(static_config, logrotate):
     log_info("Starting Traefik reverse proxy")
-    os.execvp("traefik", ["traefik", f"--configFile={static_config}"])
+    traefik = subprocess.Popen(["traefik", f"--configFile={static_config}"])
+
+    def stop(_signum, _frame):
+        stop_process(traefik)
+        stop_process(logrotate)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    exit_code = traefik.wait()
+    stop_process(logrotate)
+    fatal_wait(f"Traefik exited unexpectedly with code {exit_code}. Check the Traefik logs above.")
 
 
 def main():
@@ -118,12 +137,9 @@ def main():
     options = load_options()
     static_config = resolve_static_config(options)
     validate_tls_files(options)
-    validate_traefik_config(static_config)
 
     logrotate = start_logrotate_background()
-    signal.signal(signal.SIGTERM, lambda *_: logrotate.terminate())
-
-    start_traefik(static_config)
+    start_traefik(static_config, logrotate)
 
 
 if __name__ == "__main__":
