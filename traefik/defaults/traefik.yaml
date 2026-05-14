@@ -1,0 +1,21 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  filePath: /share/traefik-error.log
+  format: json
+
+providers:
+  file:
+    directory: /config/traefik/dynamic
+    watch: true
+
+api:
+  dashboard: false
+  insecure: false
+
+ping: {}
+
+entryPoints: {}

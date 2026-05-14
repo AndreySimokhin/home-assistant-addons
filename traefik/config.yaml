@@ -1,0 +1,131 @@
+name: Traefik Reverse Proxy
+version: 0.1.0
+slug: traefik
+description: Production-oriented Traefik v3 reverse proxy for Home Assistant OS
+url: https://github.com/charwisd/home-assistant-addons/tree/main/traefik
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: services
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+privileged: []
+apparmor: true
+ports:
+  80/tcp: 80
+  443/tcp: 443
+ports_description:
+  80/tcp: HTTP entrypoint
+  443/tcp: HTTPS entrypoint
+map:
+  - ssl:ro
+  - share:rw
+  - addon_config:rw
+options:
+  domain: home.example.com
+  http_enabled: true
+  https_enabled: true
+  http_port: 80
+  https_port: 443
+  redirect_http_to_https: true
+  tls:
+    enabled: true
+    cert_file: /ssl/fullchain.pem
+    key_file: /ssl/privkey.pem
+    min_version: VersionTLS12
+    hsts_enabled: true
+    hsts_seconds: 31536000
+  home_assistant:
+    url: http://homeassistant:8123
+    pass_host_header: true
+  logs:
+    access_enabled: true
+    json: true
+    access_file: /share/traefik-access.log
+    error_file: /share/traefik-error.log
+    level: INFO
+    rotate_size: 10M
+    rotate_count: 7
+  middleware:
+    security_headers: true
+    rate_limit: true
+    average: 100
+    burst: 50
+    login_average: 5
+    login_burst: 10
+    inflight_limit: 100
+    ip_allowlist_enabled: false
+    ip_allowlist:
+      - 192.168.0.0/16
+      - 10.0.0.0/8
+    basic_auth_enabled: false
+    basic_auth_users: []
+    forward_auth_enabled: false
+    forward_auth_address: ""
+  dashboard:
+    enabled: false
+    external: false
+  experimental_modules: []
+  custom:
+    static_config_override_file: ""
+    extra_static_config: ""
+    extra_dynamic_config: ""
+    enable_dynamic_directory: true
+schema:
+  domain: str
+  http_enabled: bool
+  https_enabled: bool
+  http_port: port
+  https_port: port
+  redirect_http_to_https: bool
+  tls:
+    enabled: bool
+    cert_file: str
+    key_file: str
+    min_version: list(VersionTLS12|VersionTLS13)
+    hsts_enabled: bool
+    hsts_seconds: int
+  home_assistant:
+    url: url
+    pass_host_header: bool
+  logs:
+    access_enabled: bool
+    json: bool
+    access_file: str
+    error_file: str
+    level: list(DEBUG|INFO|WARN|ERROR)
+    rotate_size: str
+    rotate_count: int
+  middleware:
+    security_headers: bool
+    rate_limit: bool
+    average: int
+    burst: int
+    login_average: int
+    login_burst: int
+    inflight_limit: int
+    ip_allowlist_enabled: bool
+    ip_allowlist:
+      - str
+    basic_auth_enabled: bool
+    basic_auth_users:
+      - str
+    forward_auth_enabled: bool
+    forward_auth_address: str?
+  dashboard:
+    enabled: bool
+    external: bool
+  experimental_modules:
+    - name: str
+      module_name: str
+      version: str
+      enabled: bool
+  custom:
+    static_config_override_file: str?
+    extra_static_config: str?
+    extra_dynamic_config: str?
+    enable_dynamic_directory: bool

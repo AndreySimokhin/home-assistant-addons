@@ -1,0 +1,11 @@
+http:
+  routers: {}
+  services: {}
+  middlewares: {}
+  serversTransports: {}
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: true
