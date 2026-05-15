@@ -1,7 +1,7 @@
-name: Matter.js Server
+name: Matter Server
 version: 0.1.0
 slug: matter_server
-description: Matter.js WebSocket Server for Home Assistant
+description: Matter WebSocket Server for Home Assistant
 url: https://github.com/AndreySimokhin/home-assistant-addons/tree/main/matter-server
 arch:
   - aarch64
@@ -32,13 +32,14 @@ options:
   port: 5580
   listen_address: ""
   primary_interface: ""
-  bluetooth_adapter: null
+  bluetooth_adapter: -1
   vendor_id: 65521
   fabric_id: 1
   storage_path: /config/matterjs-server
   disable_ota: true
   disable_dashboard: false
   production_mode: true
+  prefer_ipv4: true
   enable_test_net_dcl: false
   run_as_root: false
   extra_args: []
@@ -48,13 +49,14 @@ schema:
   port: port
   listen_address: str?
   primary_interface: str?
-  bluetooth_adapter: int?
+  bluetooth_adapter: int
   vendor_id: int
   fabric_id: int
   storage_path: str
   disable_ota: bool
   disable_dashboard: bool
   production_mode: bool
+  prefer_ipv4: bool
   enable_test_net_dcl: bool?
   run_as_root: bool
   extra_args:

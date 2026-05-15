@@ -32,6 +32,12 @@ function addValue(args, value, flag) {
   }
 }
 
+function addPositiveIntegerValue(args, value, flag) {
+  if (Number.isInteger(value) && value >= 0) {
+    args.push(flag, String(value));
+  }
+}
+
 function applyEnvVars(envVars) {
   for (const item of envVars ?? []) {
     const separator = item.indexOf("=");
@@ -39,6 +45,13 @@ function applyEnvVars(envVars) {
       continue;
     }
     process.env[item.slice(0, separator)] = item.slice(separator + 1);
+  }
+}
+
+function appendNodeOption(option) {
+  const current = process.env.NODE_OPTIONS || "";
+  if (!current.split(/\s+/).includes(option)) {
+    process.env.NODE_OPTIONS = `${current} ${option}`.trim();
   }
 }
 
@@ -93,13 +106,17 @@ function main() {
   process.env.DISABLE_DASHBOARD = optionEnabled(options.disable_dashboard) ? "true" : "false";
   process.env.PRODUCTION_MODE = optionEnabled(options.production_mode) ? "true" : "false";
 
+  if (optionEnabled(options.prefer_ipv4)) {
+    appendNodeOption("--dns-result-order=ipv4first");
+  }
+
   const args = ["--enable-source-maps", SERVER];
   addValue(args, storagePath, "--storage-path");
   addValue(args, options.port || 5580, "--port");
   addValue(args, options.log_level || "info", "--log-level");
   addValue(args, options.listen_address, "--listen-address");
   addValue(args, options.primary_interface, "--primary-interface");
-  addValue(args, options.bluetooth_adapter, "--bluetooth-adapter");
+  addPositiveIntegerValue(args, options.bluetooth_adapter, "--bluetooth-adapter");
   addValue(args, options.vendor_id, "--vendorid");
   addValue(args, options.fabric_id, "--fabricid");
   addFlag(args, options.enable_test_net_dcl, "--enable-test-net-dcl");
@@ -117,6 +134,7 @@ function main() {
   console.log(`[INFO] Storage path: ${storagePath}`);
   console.log(`[INFO] OTA updates: ${optionEnabled(options.disable_ota) ? "disabled" : "enabled"}`);
   console.log(`[INFO] Test-net DCL: ${optionEnabled(options.enable_test_net_dcl) ? "enabled" : "disabled"}`);
+  console.log(`[INFO] IPv4 preferred for DNS: ${optionEnabled(options.prefer_ipv4) ? "yes" : "no"}`);
 
   const child = spawn("node", args, {
     stdio: "inherit",

@@ -1,6 +1,6 @@
-# Matter.js Server
+# Matter Server
 
-Matter.js WebSocket Server for Home Assistant.
+Matter WebSocket Server for Home Assistant.
 
 The add-on uses the official `ghcr.io/matter-js/matterjs-server` container as its base and adds a small Home Assistant add-on entrypoint that maps add-on options to Matter.js Server CLI flags.
 
@@ -11,13 +11,14 @@ log_level: info
 port: 5580
 listen_address: ""
 primary_interface: ""
-bluetooth_adapter: null
+bluetooth_adapter: -1
 vendor_id: 65521
 fabric_id: 1
 storage_path: /config/matterjs-server
 disable_ota: true
 disable_dashboard: false
 production_mode: true
+prefer_ipv4: true
 enable_test_net_dcl: false
 run_as_root: false
 extra_args: []
@@ -25,6 +26,10 @@ env_vars: []
 ```
 
 OTA is disabled by default and test-net DCL is disabled. The server still needs local network access for Matter/mDNS and may access official Matter vendor/device certificate data when needed.
+
+`bluetooth_adapter: -1` disables BLE commissioning. Use `0` for `hci0`, `1` for `hci1`, and so on.
+
+`prefer_ipv4: true` sets Node.js DNS ordering to prefer IPv4 for outbound HTTPS requests such as Matter DCL vendor/certificate lookups. Local Matter IPv6/mDNS communication is still handled by the host network stack.
 
 ## Home Assistant Integration
 

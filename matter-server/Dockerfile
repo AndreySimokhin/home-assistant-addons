@@ -7,8 +7,8 @@ ARG BUILD_VERSION=0.1.0
 ARG MATTERJS_SERVER_VERSION=stable
 
 LABEL \
-  org.opencontainers.image.title="Matter.js Server Home Assistant Add-on" \
-  org.opencontainers.image.description="Matter.js Server add-on for Home Assistant" \
+  org.opencontainers.image.title="Matter Server Home Assistant Add-on" \
+  org.opencontainers.image.description="Matter Server add-on for Home Assistant" \
   org.opencontainers.image.source="https://github.com/AndreySimokhin/home-assistant-addons/tree/main/matter-server" \
   io.hass.version="${BUILD_VERSION}" \
   io.hass.type="app" \
